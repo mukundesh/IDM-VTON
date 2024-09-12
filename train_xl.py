@@ -38,7 +38,7 @@ def print_memory(n=''):
         
 def print_tensor(t, n=''):
     if t is not None:
-        print(f'{n}: {t.dtype} {t.device} {t.shape} [{t.min():.4f}, {t.mean():.4f}, {t.max():.4f} Memory {get_gpu_memory()}')
+        print(f'{n}: {t.dtype} {t.device} {t.shape} [{t.min():.4f}, {t.mean():.4f}, {t.max():.4f}')
     else:
         print(f'{n}.shape: tensor is empty')
 
