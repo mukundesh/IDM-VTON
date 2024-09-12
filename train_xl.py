@@ -35,6 +35,12 @@ def print_memory(n=''):
         print(f'{n}: {gpu_memory:.2f}GB {tot_memory:.2f}GB')
     else:
         print(f' : {gpu_memory:.2f}GB {tot_memory:.2f}GB')
+        
+def print_tensor(t, n=''):
+    if t is not None:
+        print(f'{n}: {t.dtype} {t.device} {t.shape} [{t.min():.4f}, {t.mean():.4f}, {t.max():.4f} Memory {get_gpu_memory()}')
+    else:
+        print(f'{n}.shape: tensor is empty')
 
 
 class VitonHDDataset(data.Dataset):
@@ -725,6 +731,11 @@ def main():
                 text_embeds_2_cloth = encoder_output_2.hidden_states[-2]
                 text_embeds_cloth = torch.concat([text_embeds_cloth, text_embeds_2_cloth], dim=-1) # concat
 
+
+                print_tensor(cloth_values, 'cloth_values')
+                print_tensor(text_embeds_cloth, 'text_embeds_cloth')
+                print_tensor(timesteps, 'timesteps')
+                
 
                 down,reference_features = unet_encoder(cloth_values,timesteps, text_embeds_cloth,return_dict=False)
                 reference_features = list(reference_features)
