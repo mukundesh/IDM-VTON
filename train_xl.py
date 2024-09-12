@@ -26,6 +26,15 @@ from tqdm.auto import tqdm
 from diffusers.training_utils import compute_snr
 import torchvision.transforms.functional as TF
 
+def print_memory(n=''):
+    (u, t) = torch.cuda.mem_get_info()
+    r = t-u
+    gpu_memory = r/(1024 ** 3)
+    tot_memory = t/(1024 ** 3)
+    if n:
+        print(f'{n}: {gpu_memory:.2f}GB {tot_memory:.2f}GB')
+    else:
+        print(f' : {gpu_memory:.2f}GB {tot_memory:.2f}GB')
 
 
 class VitonHDDataset(data.Dataset):
@@ -325,6 +334,8 @@ def main():
     unet_encoder.config["addition_embed_type"] = None
     image_encoder = CLIPVisionModelWithProjection.from_pretrained(args.image_encoder_path)
 
+    print_memory('After loading unet_encoder + other models')
+
     #customize unet start
     unet = UNet2DConditionModel.from_pretrained(args.pretrained_model_name_or_path, subfolder="unet",low_cpu_mem_usage=False, device_map=None)
     unet.config.encoder_hid_dim = image_encoder.config.hidden_size
@@ -332,6 +343,7 @@ def main():
     unet.config["encoder_hid_dim"] = image_encoder.config.hidden_size
     unet.config["encoder_hid_dim_type"] = "ip_image_proj"
 
+    print_memory('After unet')    
 
     state_dict = torch.load(args.pretrained_ip_adapter_path, map_location="cpu")
  
@@ -373,6 +385,8 @@ def main():
     unet.config.in_channels = 13  # update config
     #customize unet end
 
+    print_memory('After ip_adapter')        
+
 
     weight_dtype = torch.float32
     if accelerator.mixed_precision == "fp16":
@@ -385,6 +399,7 @@ def main():
     image_encoder.to(accelerator.device, dtype=weight_dtype)
     unet_encoder.to(accelerator.device, dtype=weight_dtype)
 
+    print_memory('After moving')            
 
     vae.requires_grad_(False)
     text_encoder.requires_grad_(False)
@@ -393,9 +408,8 @@ def main():
     unet_encoder.requires_grad_(False)
     unet.requires_grad_(True)
 
-
-
-
+    print_memory('After requires_grad')
+    
     if args.enable_xformers_memory_efficient_attention:
         if is_xformers_available():
             import xformers
@@ -431,6 +445,8 @@ def main():
         weight_decay=args.adam_weight_decay,
         eps=args.adam_epsilon,
     )
+    
+    print_memory('After optimizer')    
     
     train_dataset = VitonHDDataset(
         dataroot_path=args.data_dir,
@@ -489,7 +505,8 @@ def main():
     for epoch in range(first_epoch, args.num_train_epochs):
         for step, batch in enumerate(train_dataloader):
             with accelerator.accumulate(unet), accelerator.accumulate(image_proj_model):
-                if global_step % args.logging_steps == 0:
+                #if global_step % args.logging_steps == 0:
+                if False:
                     if accelerator.is_main_process:
                         with torch.no_grad():
                             with torch.cuda.amp.autocast():
@@ -642,6 +659,8 @@ def main():
                     return_tensors="pt"
                 ).input_ids
 
+                print_memory('before computation')
+
                 encoder_output = text_encoder(text_input_ids.to(accelerator.device), output_hidden_states=True)
                 text_embeds = encoder_output.hidden_states[-2]
                 encoder_output_2 = text_encoder_2(text_input_ids_2.to(accelerator.device), output_hidden_states=True)
@@ -744,6 +763,7 @@ def main():
                 avg_loss = accelerator.gather(loss.repeat(args.train_batch_size)).mean()
                 train_loss += avg_loss.item() / args.gradient_accumulation_steps
 
+                print_memory('before backpropogation')
                 
                 # Backpropagate
                 accelerator.backward(loss)
@@ -756,6 +776,8 @@ def main():
                 # Load scheduler, tokenizer and models.
                 progress_bar.update(1)
                 global_step += 1
+                print_memory('done step')
+                
             if accelerator.sync_gradients:
                 progress_bar.update(1)
                 global_step += 1
