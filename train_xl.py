@@ -397,9 +397,11 @@ def main():
     text_encoder.to(accelerator.device, dtype=weight_dtype)
     text_encoder_2.to(accelerator.device, dtype=weight_dtype)
     image_encoder.to(accelerator.device, dtype=weight_dtype)
+    print_memory('After moving rest')
+    
     unet_encoder.to(accelerator.device, dtype=weight_dtype)
 
-    print_memory('After moving')            
+    print_memory('After moving unet_encoder')            
 
     vae.requires_grad_(False)
     text_encoder.requires_grad_(False)
@@ -611,7 +613,8 @@ def main():
                         torch.cuda.empty_cache()
 
 
-
+                print_memory('\nStarting computation')
+                
                 pixel_values = batch["image"].to(dtype=vae.dtype)
                 model_input = vae.encode(pixel_values).latent_dist.sample()
                 model_input = model_input * vae.config.scaling_factor
@@ -659,7 +662,7 @@ def main():
                     return_tensors="pt"
                 ).input_ids
 
-                print_memory('before computation')
+                print_memory('\nbefore computation')
 
                 encoder_output = text_encoder(text_input_ids.to(accelerator.device), output_hidden_states=True)
                 text_embeds = encoder_output.hidden_states[-2]
@@ -763,7 +766,7 @@ def main():
                 avg_loss = accelerator.gather(loss.repeat(args.train_batch_size)).mean()
                 train_loss += avg_loss.item() / args.gradient_accumulation_steps
 
-                print_memory('before backpropogation')
+                print_memory('\nbefore backpropogation')
                 
                 # Backpropagate
                 accelerator.backward(loss)
@@ -776,7 +779,7 @@ def main():
                 # Load scheduler, tokenizer and models.
                 progress_bar.update(1)
                 global_step += 1
-                print_memory('done step')
+                print_memory('\ndone step')
                 
             if accelerator.sync_gradients:
                 progress_bar.update(1)
@@ -790,6 +793,7 @@ def main():
                 break
 
         if global_step % args.checkpointing_epoch == 0:
+            break
             if accelerator.is_main_process:
                 # _before_ saving state, check if this save would set us over the `checkpoints_total_limit`
                 unwrapped_unet = accelerator.unwrap_model(
